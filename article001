@@ -1,0 +1,153 @@
+[root@server ~]# dnf install https://zfsonlinux.org/epel/zfs-release-3-0$(rpm --eval "%{dist}").noarch.rpm
+[root@server ~]# dnf config-manager --disable zfs
+[root@server ~]# dnf config-manager --enable zfs-kmod
+[root@server ~]# dnf install -y epel-release
+[root@server ~]# dnf install -y kernel-devel
+[root@server ~]# dnf install -y zfs
+[root@server ~]# reboot
+[root@server ~]# /sbin/modprobe zfs
+modprobe: ERROR: could not insert 'zfs': Key was rejected by service
+
+to fix this issue the administrator has to disable Secure Boot of the virtual machine.
+
+[root@server ~]# modprobe zfs
+[root@server ~]# lsmod | grep zfs
+zfs                  6959104  0
+spl                   200704  1 zfs
+[root@server ~]# zpool create -f -m none storage raidz1 /dev/disk/by-id/scsi-36000c29a9ebe575d84dfc8a532308ef1 /dev/disk/by-id/scsi-36000c29fd0581d9cfd2240c07d6a4702 /dev/disk/by-id/scsi-36000c2926485ab7f38d38d0e4a0db7ff
+[root@server ~]# zpool status
+  pool: storage
+ state: ONLINE
+config:
+
+    NAME                                        STATE     READ WRITE CKSUM
+    storage                                     ONLINE       0     0     0
+      raidz1-0                                  ONLINE       0     0     0
+        scsi-36000c29a9ebe575d84dfc8a532308ef1  ONLINE       0     0     0
+        scsi-36000c29fd0581d9cfd2240c07d6a4702  ONLINE       0     0     0
+        scsi-36000c2926485ab7f38d38d0e4a0db7ff  ONLINE       0     0     0
+
+errors: No known data errors
+[root@server ~]# zfs create -o xattr=sa -o acltype=posix -o mountpoint=/srv/shares storage/shares
+[root@server ~]# zfs create -o xattr=sa -o acltype=posix -o mountpoint=/srv/home storage/home
+[root@server ~]# zfs create -o xattr=sa -o acltype=posix -o mountpoint=/srv/openldap storage/openldap
+[root@server ~]# zfs create -o xattr=sa -o acltype=posix -o mountpoint=/srv/docker storage/docker
+[root@server ~]# zfs create -o xattr=sa -o acltype=posix -o mountpoint=/srv/mssql storage/mssql
+[root@server ~]# lsblk
+NAME        MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS
+sda           8:0    0    40G  0 disk 
+├─sda1        8:1    0     1G  0 part /boot
+└─sda2        8:2    0    39G  0 part 
+  ├─cs-root 253:0    0    37G  0 lvm  /
+  └─cs-swap 253:1    0     2G  0 lvm  [SWAP]
+sdb           8:16   0   150G  0 disk 
+├─sdb1        8:17   0   150G  0 part 
+└─sdb9        8:25   0     8M  0 part 
+sdc           8:32   0   150G  0 disk 
+├─sdc1        8:33   0   150G  0 part 
+└─sdc9        8:41   0     8M  0 part 
+sdd           8:48   0   150G  0 disk 
+├─sdd1        8:49   0   150G  0 part 
+└─sdd9        8:57   0     8M  0 part 
+sde           8:64   0   100G  0 disk 
+sdf           8:80   0   100G  0 disk 
+sr0          11:0    1 232.3M  0 rom  
+sr1          11:1    1  14.5G  0 rom  
+[root@server ~]# df -h
+Filesystem           Size  Used Avail Use% Mounted on
+devtmpfs             816M     0  816M   0% /dev
+tmpfs                838M     0  838M   0% /dev/shm
+tmpfs                335M  5.0M  330M   2% /run
+/dev/mapper/cs-root   37G  3.3G   34G   9% /
+/dev/sda1            960M  505M  456M  53% /boot
+tmpfs                168M     0  168M   0% /run/user/1000
+storage/shares       290G  128K  290G   1% /srv/shares
+storage/home         290G  128K  290G   1% /srv/home
+storage/openldap     290G  128K  290G   1% /srv/openldap
+storage/docker       290G  128K  290G   1% /srv/docker
+storage/mssql        290G  128K  290G   1% /srv/mssql
+[root@server ~]# zpool list
+NAME      SIZE  ALLOC   FREE  CKPOINT  EXPANDSZ   FRAG    CAP  DEDUP    HEALTH  ALTROOT
+storage   448G   663K   448G        -         -     0%     0%  1.00x    ONLINE  -
+[root@server ~]# zfs list
+zfs list
+NAME               USED  AVAIL  REFER  MOUNTPOINT
+storage            442K   289G  30.6K  none
+storage/docker    30.6K   289G  30.6K  /srv/docker
+storage/home      30.6K   289G  30.6K  /srv/home
+storage/mssql     30.6K   289G  30.6K  /srv/mssql
+storage/openldap  30.6K   289G  30.6K  /srv/openldap
+storage/shares    30.6K   289G  30.6K  /srv/shares
+
+[root@server ~]# zpool iostat -v 1
+                                              capacity     operations     bandwidth 
+pool                                        alloc   free   read  write   read  write
+------------------------------------------  -----  -----  -----  -----  -----  -----
+storage                                      663K   448G      0      1     27  2.89K
+  raidz1-0                                   663K   448G      0      1     27  2.89K
+    scsi-36000c29a9ebe575d84dfc8a532308ef1      -      -      0      0      9    986
+    scsi-36000c29fd0581d9cfd2240c07d6a4702      -      -      0      0      9    988
+    scsi-36000c2926485ab7f38d38d0e4a0db7ff      -      -      0      0      9    986
+------------------------------------------  -----  -----  -----  -----  -----  -----
+
+[root@server ~]# parted /dev/disk/by-id/scsi-36000c29944d576d60c584bd39e95106b mklabel gpt
+Information: You may need to update /etc/fstab.
+
+[root@server ~]# parted /dev/disk/by-id/scsi-36000c29944d576d60c584bd39e95106b mkpart primary 0% 10GB
+Information: You may need to update /etc/fstab.
+
+[root@server ~]# parted /dev/disk/by-id/scsi-36000c294544b5877b34094ad68c18aed mklabel gpt
+Information: You may need to update /etc/fstab.
+
+[root@server ~]# parted /dev/disk/by-id/scsi-36000c294544b5877b34094ad68c18aed mkpart primary 0% 10GB
+Information: You may need to update /etc/fstab.
+
+[root@server ~]# zpool add storage log mirror /dev/disk/by-id/scsi-36000c29944d576d60c584bd39e95106b-part1 /dev/disk/by-id/scsi-36000c294544b5877b34094ad68c18aed-part1
+[root@server ~]# zpool status
+  pool: storage
+ state: ONLINE
+config:
+
+    NAME                                              STATE     READ WRITE CKSUM
+    storage                                           ONLINE       0     0     0
+      raidz1-0                                        ONLINE       0     0     0
+        scsi-36000c29a9ebe575d84dfc8a532308ef1        ONLINE       0     0     0
+        scsi-36000c29fd0581d9cfd2240c07d6a4702        ONLINE       0     0     0
+        scsi-36000c2926485ab7f38d38d0e4a0db7ff        ONLINE       0     0     0
+    logs    
+      mirror-1                                        ONLINE       0     0     0
+        scsi-36000c29944d576d60c584bd39e95106b-part1  ONLINE       0     0     0
+        scsi-36000c294544b5877b34094ad68c18aed-part1  ONLINE       0     0     0
+
+errors: No known data errors
+[root@server ~]# parted /dev/disk/by-id/scsi-36000c294544b5877b34094ad68c18aed mkpart primary 10GB 100%
+Information: You may need to update /etc/fstab.
+
+[root@server ~]# parted /dev/disk/by-id/scsi-36000c29944d576d60c584bd39e95106b mkpart primary 10GB 100%
+Information: You may need to update /etc/fstab.
+
+[root@server ~]# zpool add storage cache /dev/disk/by-id/scsi-36000c29944d576d60c584bd39e95106b-part2 /dev/disk/by-id/scsi-36000c294544b5877b34094ad68c18aed-part2
+[root@server ~]# zpool list
+NAME      SIZE  ALLOC   FREE  CKPOINT  EXPANDSZ   FRAG    CAP  DEDUP    HEALTH  ALTROOT
+storage   448G   840K   448G        -         -     0%     0%  1.00x    ONLINE  -
+[root@server ~]# zpool status
+  pool: storage
+ state: ONLINE
+config:
+
+    NAME                                              STATE     READ WRITE CKSUM
+    storage                                           ONLINE       0     0     0
+      raidz1-0                                        ONLINE       0     0     0
+        scsi-36000c29a9ebe575d84dfc8a532308ef1        ONLINE       0     0     0
+        scsi-36000c29fd0581d9cfd2240c07d6a4702        ONLINE       0     0     0
+        scsi-36000c2926485ab7f38d38d0e4a0db7ff        ONLINE       0     0     0
+    logs    
+      mirror-1                                        ONLINE       0     0     0
+        scsi-36000c29944d576d60c584bd39e95106b-part1  ONLINE       0     0     0
+        scsi-36000c294544b5877b34094ad68c18aed-part1  ONLINE       0     0     0
+    cache
+      scsi-36000c29944d576d60c584bd39e95106b-part2    ONLINE       0     0     0
+      scsi-36000c294544b5877b34094ad68c18aed-part2    ONLINE       0     0     0
+
+errors: No known data errors
+[root@server ~]# 
